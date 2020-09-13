@@ -1,0 +1,115 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  # html_notebook: default
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r}
+options(scipen=999)
+set.seed(1234)
+LR2 <- read.table(file="./LR2.csv", header = TRUE, sep = ",")
+names(LR2)
+attach(LR2)
+plot(x,y)
+boxplot(x~y)
+```
+
+# Assignment 2
+
+## Exercise 1
+
+$$\text{Pr}(Y=1 | X=x)=\Phi(\beta_0+\beta_1x)$$
+$$\Phi(x)=\int_{-\infty}^{x}\frac{1}{\sqrt{2\pi}}\exp^{-\frac{1}{2}t^2}dt$$
+
+$$\Phi(z)=\text{P}(Z \leq z), Z\sim\mathcal{N}(0,1)$$
+Thus $\Phi(\beta_0+\beta_1x)=\text{P}(Z\leq z)$
+
+Write an `R` function that computes the maximum likelihood estimate, `\mathscr{L} \left( \beta_0, \beta_1 \right)`, along with bootstrapped errors.
+
+```{r}
+# objective function
+probit_mle_b <- function(x,y) {
+  
+  # probit link
+  # 
+  probit <- function(b,x,y) {
+    n <- length(y)
+    ll <- 0
+    for(i in 1:n) {
+      z <- b[1]+b[2]*x[i]
+      z <- qnorm(z, mean=0, sd=1, log.p = FALSE)
+      ll <- ll + log(z)*(y[i]==1) + log(1-z)*(y[i]==0)
+      # print(ll)
+    }
+    # print(ll)
+    return(-ll)
+  }
+  
+  # mle
+  # 
+  obj = optim(c(0,0), probit, x=x, y=y)
+  
+  coef1 <- obj$par[1]
+  coef2 <- obj$par[2]
+  
+  ## Bootstrap
+  ## 
+  
+  B <- 100
+  
+  b_boot = matrix(rep(0,2*B),B,2)
+  n <- length(y)
+  for (i in 1:B){
+    # indices for the i-th bootstrap subsample
+    ind_ = sample(n,n,replace=TRUE)
+    # input vector in the subsample
+    xb = x[ind_]
+    # output vector in the subsample
+    yb = y[ind_]
+    
+    # compute the maximum likelihood estimates
+    obj = optim(c(0,0), probit, x=xb, y=yb)
+    
+    b_boot[i,1] = obj$par[1]
+    b_boot[i,2] = obj$par[2]
+  }
+  
+  
+  return(
+    list(
+      coefficients = c(coef1,coef2),
+      standard_errors = c(sd(b_boot[,1]),sd(b_boot[,2])),
+      predict = ifelse(pnorm(coef1+coef2*x,0,1)>1/2,1,0)
+      )
+    )
+}
+
+# Apply the probit estimator to LR2
+est <- probit_mle_b(LR2$x,LR2$y)
+est$coefficients
+
+```
+
+
+```{r}
+glm.est <- glm(y~x,family=binomial(link = "probit"))
+# summary(glm.est)
+plot(x,y, pch=20, col=scales::alpha("black",alpha = 0.3))
+abline(h = 1, lty=2)
+abline(h = 0, lty=2)
+x0 <- seq(min(x),max(x),length.out = length(x))
+y0 <- sort(predict(glm.est,list(x),type="response"))
+lines(x0,y0,lwd=1.5,col="dodgerblue")
+```
+
+```{r eval=FALSE, include=FALSE}
+N0 <- glm.est$coefficients
+N1 <- est$coefficients
+X1 <- dnorm(exp(N0[1]+N0[2]*x),0,1)
+X2 <- pnorm(N1[1]+N1[2]*x,0,1)
+plot(sort(dnorm(X1,0,1)))
+plot(sort(dnorm(X2,0,1)))
+```
