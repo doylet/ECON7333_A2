@@ -2,7 +2,8 @@
 title: "R Notebook"
 output:
   pdf_document: default
-  # html_notebook: default
+  html_document: 
+    keep_md: yes
 editor_options:
   chunk_output_type: inline
 ---
@@ -23,6 +24,18 @@ boxplot(x~y)
 
 $$\text{Pr}(Y=1 | X=x)=\Phi(\beta_0+\beta_1x)$$
 $$\Phi(x)=\int_{-\infty}^{x}\frac{1}{\sqrt{2\pi}}\exp^{-\frac{1}{2}t^2}dt$$
+```{r eval=FALSE, include=FALSE}
+phi_pdf <- function(x) {
+  cons <- sqrt(2*pi)^-1
+  
+  # ab <- seq(-10,x,by = 0.001)
+  cons*exp(-(x^2/2))
+}
+#PDF
+phi_pdf(0)  #0.3989423
+dnorm(0,0,1)#0.3989423
+```
+
 
 $$\Phi(z)=\text{P}(Z \leq z), Z\sim\mathcal{N}(0,1)$$
 Thus $\Phi(\beta_0+\beta_1x)=\text{P}(Z\leq z)$
@@ -31,7 +44,9 @@ Write an `R` function that computes the maximum likelihood estimate, `\mathscr{L
 
 ```{r}
 # objective function
-probit_mle_b <- function(x,y) {
+probit_mle_b <- function(x,y,...) {
+  
+  opts <- list(...)
   
   # probit link
   # 
@@ -40,11 +55,10 @@ probit_mle_b <- function(x,y) {
     ll <- 0
     for(i in 1:n) {
       z <- b[1]+b[2]*x[i]
-      z <- qnorm(z, mean=0, sd=1, log.p = FALSE)
+      z <- pnorm(z, mean=0, sd=1, log.p = FALSE)
       ll <- ll + log(z)*(y[i]==1) + log(1-z)*(y[i]==0)
-      # print(ll)
     }
-    # print(ll)
+    
     return(-ll)
   }
   
@@ -55,14 +69,20 @@ probit_mle_b <- function(x,y) {
   coef1 <- obj$par[1]
   coef2 <- obj$par[2]
   
+  return_list <- list(
+    model = obj,
+    fitted = pnorm(coef1+coef2*x,0,1),
+    coefficients = c(coef1,coef2)
+  )
+  
   ## Bootstrap
   ## 
   
   B <- 100
   
   b_boot = matrix(rep(0,2*B),B,2)
-  n <- length(y)
-  for (i in 1:B){
+  n <- length(y) #n=1000
+  for (i in 1:B) {
     # indices for the i-th bootstrap subsample
     ind_ = sample(n,n,replace=TRUE)
     # input vector in the subsample
@@ -77,39 +97,84 @@ probit_mle_b <- function(x,y) {
     b_boot[i,2] = obj$par[2]
   }
   
-  
+  return_list$standard_errors <- c(sd(b_boot[,1]),sd(b_boot[,2]))
+  return_list$boots <- b_boot
+
+  if(!is.null(opts)) {
+    opts <- unlist(opts)
+    return_list$response = ifelse(pnorm(coef1+coef2*opts,0,1)>1/2,1,0)
+  }
+    
   return(
-    list(
-      coefficients = c(coef1,coef2),
-      standard_errors = c(sd(b_boot[,1]),sd(b_boot[,2])),
-      predict = ifelse(pnorm(coef1+coef2*x,0,1)>1/2,1,0)
-      )
-    )
+    return_list
+  )
 }
-
-# Apply the probit estimator to LR2
-est <- probit_mle_b(LR2$x,LR2$y)
-est$coefficients
-
 ```
-
 
 ```{r}
-glm.est <- glm(y~x,family=binomial(link = "probit"))
-# summary(glm.est)
-plot(x,y, pch=20, col=scales::alpha("black",alpha = 0.3))
-abline(h = 1, lty=2)
-abline(h = 0, lty=2)
-x0 <- seq(min(x),max(x),length.out = length(x))
-y0 <- sort(predict(glm.est,list(x),type="response"))
-lines(x0,y0,lwd=1.5,col="dodgerblue")
+# Apply the probit estimator to LR2
+# 
+est <- probit_mle_b(LR2$x,LR2$y,x)
+est$coefficients
+#-4.242606 -3.086030
+
+sum(diag(prop.table(table(est$response,y))))
+#0.957
+
+train <- LR2[1:800,]
+test <- LR2[801:1000,]
+est.2 <- probit_mle_b(train$x,train$y,test$x)
+est.2$coefficients
+#-4.557228 -3.213275
+
+sum(diag(prop.table(table(est.2$response,test$y))))
+#0.94
 ```
 
-```{r eval=FALSE, include=FALSE}
-N0 <- glm.est$coefficients
-N1 <- est$coefficients
-X1 <- dnorm(exp(N0[1]+N0[2]*x),0,1)
-X2 <- pnorm(N1[1]+N1[2]*x,0,1)
-plot(sort(dnorm(X1,0,1)))
-plot(sort(dnorm(X2,0,1)))
+```{r}
+glm.est <- suppressWarnings(glm(y~x,family=binomial(link = "probit")))
+plot(x,y, pch=20, col=scales::alpha("black",alpha = 0.3))
+abline(h=1, lty=2)
+abline(h=0, lty=2)
+# y0 <- sort(predict(glm.est,list(x),type="response"), decreasing = TRUE)
+y1 <- sort(est$fitted,TRUE)
+# lines(sort(x),y0,lwd=3,col="dodgerblue")
+points(sort(x),y1,pch=20,cex=0.7,col=scales::alpha("darkorange",0.5))
+```
+
+
+
+## Exercise 2
+
+Consider the model. Let $X$ and $U$ be two independent uniformly distributed random variables and let $Y$ be given by the equation
+
+$$Y=I\left(U\leq \frac{1}{1+\exp(-\beta_0-\beta_1X-\beta_2X^3-\beta_3\log(X))}\right)$$
+where 
+
+$$  $$
+
+The indicator function evaluates the logit function against the uniform random variable, $U$. 
+
+```{r}
+
+link <- function(b,n) {
+  X <- runif(n)
+  U <- runif(n)
+  
+  multi_logit_X <- function(b,x) {
+    (1 + exp(-b[1]-b[2]*x-b[3]*x^3-b[4]*log(x)))^-1
+  }
+  
+  Y <- ifelse(U<=multi_logit(b,X),1,0)
+  return(list(X,Y))
+}
+```
+
+```{r}
+
+b <- c(-4,2,5,4)
+n <- 1000
+
+link(b,n)
+
 ```
