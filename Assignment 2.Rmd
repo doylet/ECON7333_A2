@@ -14,8 +14,6 @@ set.seed(1234)
 LR2 <- read.table(file="./LR2.csv", header = TRUE, sep = ",")
 names(LR2)
 attach(LR2)
-plot(x,y)
-boxplot(x~y)
 ```
 
 # Assignment 2
@@ -153,20 +151,19 @@ where
 
 $$  $$
 
-The indicator function evaluates the logit function against the uniform random variable, $U$. 
+The indicator function constructs a test that compares a standard logistic regression function and sample uniform random variable. The logistic function takes an explanatory variable $x$ drawn from the uniform random variable $X$, and computes a response. The response is compared to an independent sample of a random variable from the uniform distribution, $U$. Where the logistic response is greater than or equal to the uniform random variable, the indicator variable classifies 
 
 ```{r}
-
 link <- function(b,n) {
   X <- runif(n)
   U <- runif(n)
   
-  multi_logit_X <- function(b,x) {
+  logit_X <- function(b,x) {
     (1 + exp(-b[1]-b[2]*x-b[3]*x^3-b[4]*log(x)))^-1
   }
   
   Y <- ifelse(U<=multi_logit(b,X),1,0)
-  return(list(X,Y))
+  return(list(X=X,Y=Y))
 }
 ```
 
@@ -175,6 +172,56 @@ link <- function(b,n) {
 b <- c(-4,2,5,4)
 n <- 1000
 
-link(b,n)
+r <- link(b,n)
+boxplot(X~Y,r)
+```
 
+Constructe a box and whiskar plot of test error rates.
+
+```{r}
+
+r.pred <- function(model) {
+  prob <- predict(model,type="response")
+  
+  if (class(model)%in%c("lda","qda")) {
+    pred <- prob$class
+    return(
+      pred
+    )
+  } else {
+    pred <- rep(0,length(prob))
+    pred[prob>0.5]=1
+    # print(table(pred,model$fitted.values))
+    return(
+      #vector of predictions
+      pred
+    )
+  }
+}
+
+#train 
+#
+#test
+
+#linear probability model
+r.lm <- lm(Y~X,r) 
+r.lm.pred <- r.pred(r.lm)
+mean(r.lm.pred==r$Y)
+
+#logistic regression
+r.glm <- glm(Y~X,r,family = binomial) 
+r.glm.pred <- r.pred(r.glm)
+mean(r.glm.pred==r$Y)
+
+#linear discriminant analysis
+r.lda <- MASS::lda(Y~X,r)
+r.lda.pred <- r.pred(r.lda)
+mean(r.lda.pred==r$Y)
+
+#quadratic discriminant analysis
+r.qda <- MASS::qda(Y~X,r) 
+r.qda.pred <- r.pred(r.qda)
+mean(r.qda.pred==r$Y)
+
+class::knn(train=r$X,test=r$X,cl=r$Y,k=1)
 ```
