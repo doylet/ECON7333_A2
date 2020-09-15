@@ -175,7 +175,7 @@ link <- function(b,n) {
 ```
 
 
-Constructe a box and whisker plot of test error rates.
+3. Constructe a box and whisker plot of test error rates.
 
 ```{r}
 # Helper function to draw samples
@@ -209,45 +209,48 @@ r.pred <- function(model,thr=0.5,newdata=NULL) {
 }
 ```
 
-Setup parameters.
-
-```{r}
-b <- c(-4,2,5,4)
-n <- 1000
-# Generate the sample data
-r <- link(b,n)
-```
 
 
 ```{r warning=FALSE}
-ter_boot <- NULL
-p <- 3/4 # draw 1/4 hold out
-B <- 1000 # 1000 bootstraps
+ter <- NULL
+b <- c(-4,2,5,4) # beta constants
+B <- 1000 # bootstraps
+n <- 1000 # sample size
+p <- 1/2
 for(i in 1:B) {
   
+  # draw sample
+  # 
+  r <- link(b,n)
   train <- r.sample(n,p)
   test <- !train
   
-  #linear probability model
+  # linear probability model
+  # 
   r.lm <- lm(Y~.,r,subset=train)
   r.lm.pred <- r.pred(r.lm,newdata=r[test,])
   ter_ <- data.frame(lm=1-mean(r.lm.pred==r$Y[test]))
   
-  #logistic regression
+  # logistic regression
+  # 
   r.glm <- glm(Y~.,r,family = binomial,subset=train)
   r.glm.pred <- r.pred(r.glm,newdata=r[test,])
   ter_$glm <- 1-mean(r.glm.pred==r$Y[test])
   
-  #linear discriminant analysis
+  # linear discriminant analysis
+  # 
   r.lda <- MASS::lda(Y~.,r,subset=train)
   r.lda.pred <- r.pred(r.lda,newdata=r[test,])
   ter_$lda <- 1-mean(r.lda.pred==r$Y[test])
-  
-  #quadratic discriminant analysis
-  r.qda <- MASS::qda(Y~.,r,subset=train) 
+
+  # quadratic discriminant analysis
+  # 
+  r.qda <- MASS::qda(Y~.,r,subset=train)
   r.qda.pred <- r.pred(r.qda,newdata=r[test,])
   ter_$qda <- 1-mean(r.qda.pred==r$Y[test])
-  
+
+  # K-nearest neighbours
+  # 
   r.knn1 <- class::knn(
     use.all = TRUE,
     train=r[train,1:2],
@@ -256,7 +259,7 @@ for(i in 1:B) {
     k=1
   )
   ter_$knn1 <- 1-mean(r.knn1==r$Y[test])
-  
+
   r.knn2 <- class::knn(
     use.all = TRUE,
     train=r[train,1:2],
@@ -265,7 +268,7 @@ for(i in 1:B) {
     k=2
   )
   ter_$knn2 <- 1-mean(r.knn2==r$Y[test])
-  
+
   r.knn3 <- class::knn(
     use.all = TRUE,
     train=r[train,1:2],
@@ -274,7 +277,7 @@ for(i in 1:B) {
     k=3
   )
   ter_$knn3 <- 1-mean(r.knn3==r$Y[test])
-  
+
   r.knn4 <- class::knn(
     use.all = TRUE,
     train=r[train,1:2],
@@ -283,7 +286,7 @@ for(i in 1:B) {
     k=4
   )
   ter_$knn4 <- 1-mean(r.knn4==r$Y[test])
-  
+
   r.knn5 <- class::knn(
     use.all = TRUE,
     train=r[train,1:2],
@@ -292,7 +295,7 @@ for(i in 1:B) {
     k=5
   )
   ter_$knn5 <- 1-mean(r.knn5==r$Y[test])
-  
+
   r.knn6 <- class::knn(
     use.all = TRUE,
     train=r[train,1:2],
@@ -302,7 +305,7 @@ for(i in 1:B) {
   )
   ter_$knn6 <- 1-mean(r.knn6==r$Y[test])
   
-  ter_boot <- rbind(ter,ter_)
+  ter <- rbind(ter,ter_)
 }
 
 boxplot(ter, xlab="models", main="Test error rates")
