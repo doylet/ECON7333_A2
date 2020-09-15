@@ -217,11 +217,10 @@ b <- c(-4,2,5,4) # beta constants
 B <- 1000 # bootstraps
 n <- 1000 # sample size
 p <- 1/2 # hold out half
-
+# draw sample
+# 
+r <- link(b,n)
 for(i in 1:B) {
-  # draw sample
-  # 
-  r <- link(b,n)
   train <- r.sample(n,p)
   test <- !train
   
