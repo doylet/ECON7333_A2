@@ -162,13 +162,12 @@ link <- function(b,n) {
     (1 + exp(-b[1]-b[2]*x-b[3]*x^3-b[4]*log(x)))^-1
   }
   
-  Y <- ifelse(U<=multi_logit(b,X),1,0)
-  return(list(X=X,Y=Y))
+  Y <- ifelse(U<=logit_X(b,X),1,0)
+  return(data.frame(X=X,Y=Y))
 }
 ```
 
 ```{r}
-
 b <- c(-4,2,5,4)
 n <- 1000
 
@@ -180,8 +179,17 @@ Constructe a box and whiskar plot of test error rates.
 
 ```{r}
 
-r.pred <- function(model) {
-  prob <- predict(model,type="response")
+r.sample <- function(r,...) {
+  p <- unlist(...)
+  # q <- 1-p
+  n <- length(r)
+  train <- runif(n)<p
+  
+  train
+}
+
+r.pred <- function(model,thr=0.5,newdata=NULL) {
+  prob <- predict(model,newdata,type="response")
   
   if (class(model)%in%c("lda","qda")) {
     pred <- prob$class
@@ -190,7 +198,7 @@ r.pred <- function(model) {
     )
   } else {
     pred <- rep(0,length(prob))
-    pred[prob>0.5]=1
+    pred[prob>thr]=1
     # print(table(pred,model$fitted.values))
     return(
       #vector of predictions
@@ -198,20 +206,21 @@ r.pred <- function(model) {
     )
   }
 }
+```
 
-#train 
-#
-#test
+```{r}
+train <- r.sample(r$X,1/2)
+test <- !train
 
 #linear probability model
-r.lm <- lm(Y~X,r) 
-r.lm.pred <- r.pred(r.lm)
-mean(r.lm.pred==r$Y)
+r.lm <- lm(Y~X,r,subset=train)
+r.lm.pred <- r.pred(r.lm,newdata=r[test,])
+mean(r.lm.pred==r$Y[test])
 
 #logistic regression
-r.glm <- glm(Y~X,r,family = binomial) 
-r.glm.pred <- r.pred(r.glm)
-mean(r.glm.pred==r$Y)
+r.glm <- glm(Y~X,r,family = binomial,subset=train) 
+r.glm.pred <- r.pred(r.glm,newdata=r[test,])
+mean(r.glm.pred==r$Y[test])
 
 #linear discriminant analysis
 r.lda <- MASS::lda(Y~X,r)
