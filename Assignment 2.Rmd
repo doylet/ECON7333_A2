@@ -1,5 +1,5 @@
 ---
-title: "R Notebook"
+title: "ECON7333 Assignment 2"
 output:
   pdf_document: default
   html_document: 
@@ -12,7 +12,6 @@ editor_options:
 options(scipen=999)
 set.seed(1234)
 LR2 <- read.table(file="./LR2.csv", header = TRUE, sep = ",")
-names(LR2)
 attach(LR2)
 ```
 
@@ -38,7 +37,7 @@ dnorm(0,0,1)#0.3989423
 $$\Phi(z)=\text{P}(Z \leq z), Z\sim\mathcal{N}(0,1)$$
 Thus $\Phi(\beta_0+\beta_1x)=\text{P}(Z\leq z)$
 
-Write an `R` function that computes the maximum likelihood estimate, `\mathscr{L} \left( \beta_0, \beta_1 \right)`, along with bootstrapped errors.
+Write an `R` function that computes the maximum likelihood estimate along with bootstrapped errors.
 
 ```{r}
 # objective function
@@ -76,7 +75,7 @@ probit_mle_b <- function(x,y,...) {
   ## Bootstrap
   ## 
   
-  B <- 100
+  B <- 100 # boots
   
   b_boot = matrix(rep(0,2*B),B,2)
   n <- length(y) #n=1000
@@ -98,6 +97,10 @@ probit_mle_b <- function(x,y,...) {
   return_list$standard_errors <- c(sd(b_boot[,1]),sd(b_boot[,2]))
   return_list$boots <- b_boot
 
+  
+  # If optional vector of new obs is supplied
+  # then predict vector of response 
+  # 
   if(!is.null(opts)) {
     opts <- unlist(opts)
     return_list$response = ifelse(pnorm(coef1+coef2*opts,0,1)>1/2,1,0)
@@ -109,24 +112,27 @@ probit_mle_b <- function(x,y,...) {
 }
 ```
 
+Apply the probit model to the `LR2` data set.  
+
 ```{r}
-# Apply the probit estimator to LR2
+# Apply probit_mle_bto LR2, supply optional vector x
 # 
 est <- probit_mle_b(LR2$x,LR2$y,x)
 est$coefficients
 #-4.242606 -3.086030
 
-sum(diag(prop.table(table(est$response,y))))
-#0.957
+# Calc test error
+1-sum(diag(prop.table(table(est$response,y))))
 
+# Setup train/test held out, then estimate
 train <- LR2[1:800,]
 test <- LR2[801:1000,]
 est.2 <- probit_mle_b(train$x,train$y,test$x)
 est.2$coefficients
 #-4.557228 -3.213275
 
-sum(diag(prop.table(table(est.2$response,test$y))))
-#0.94
+# Calc test error
+1-sum(diag(prop.table(table(est.2$response,test$y))))
 ```
 
 ```{r}
@@ -134,9 +140,7 @@ glm.est <- suppressWarnings(glm(y~x,family=binomial(link = "probit")))
 plot(x,y, pch=20, col=scales::alpha("black",alpha = 0.3))
 abline(h=1, lty=2)
 abline(h=0, lty=2)
-# y0 <- sort(predict(glm.est,list(x),type="response"), decreasing = TRUE)
 y1 <- sort(est$fitted,TRUE)
-# lines(sort(x),y0,lwd=3,col="dodgerblue")
 points(sort(x),y1,pch=20,cex=0.7,col=scales::alpha("darkorange",0.5))
 ```
 
@@ -147,11 +151,14 @@ points(sort(x),y1,pch=20,cex=0.7,col=scales::alpha("darkorange",0.5))
 Consider the model. Let $X$ and $U$ be two independent uniformly distributed random variables and let $Y$ be given by the equation
 
 $$Y=I\left(U\leq \frac{1}{1+\exp(-\beta_0-\beta_1X-\beta_2X^3-\beta_3\log(X))}\right)$$
+
 where 
 
-$$  $$
+1. Assuming one observes a sample of size n of the variables X and Y, comment the underlying model for that dataset while explaining its structure in plain English.
 
 The indicator function constructs a test that compares a standard logistic regression function and sample uniform random variable. The logistic function takes an explanatory variable $x$ drawn from the uniform random variable $X$, and computes a response. The response is compared to an independent sample of a random variable from the uniform distribution, $U$. Where the logistic response is greater than or equal to the uniform random variable, the indicator variable classifies 
+
+2. Construct an `R` function that generates a sample of size $n$ of variables $X$ and $Y$.
 
 ```{r}
 link <- function(b,n) {
@@ -163,43 +170,37 @@ link <- function(b,n) {
   }
   
   Y <- ifelse(U<=logit_X(b,X),1,0)
-  return(data.frame(X=X,Y=Y))
+  return(data.frame(X=X,U=U,Y=Y))
 }
 ```
 
-```{r}
-b <- c(-4,2,5,4)
-n <- 1000
 
-r <- link(b,n)
-boxplot(X~Y,r)
-```
-
-Constructe a box and whiskar plot of test error rates.
+Constructe a box and whisker plot of test error rates.
 
 ```{r}
-
-r.sample <- function(r,...) {
-  p <- unlist(...)
-  # q <- 1-p
-  n <- length(r)
-  train <- runif(n)<p
+# Helper function to draw samples
+r.sample <- function(n,p) {
+  train <- runif(n)<=p
   
   train
 }
 
+# Predict response convenience wrapper 
 r.pred <- function(model,thr=0.5,newdata=NULL) {
-  prob <- predict(model,newdata,type="response")
+  if(is.null(newdata)) print("No data")
+  prob <- suppressWarnings(predict(model,newdata,type="response"))
   
   if (class(model)%in%c("lda","qda")) {
     pred <- prob$class
+    
     return(
       pred
     )
+    
   } else {
     pred <- rep(0,length(prob))
     pred[prob>thr]=1
-    # print(table(pred,model$fitted.values))
+    
     return(
       #vector of predictions
       pred
@@ -208,29 +209,104 @@ r.pred <- function(model,thr=0.5,newdata=NULL) {
 }
 ```
 
+Setup parameters.
+
 ```{r}
-train <- r.sample(r$X,1/2)
-test <- !train
-
-#linear probability model
-r.lm <- lm(Y~X,r,subset=train)
-r.lm.pred <- r.pred(r.lm,newdata=r[test,])
-mean(r.lm.pred==r$Y[test])
-
-#logistic regression
-r.glm <- glm(Y~X,r,family = binomial,subset=train) 
-r.glm.pred <- r.pred(r.glm,newdata=r[test,])
-mean(r.glm.pred==r$Y[test])
-
-#linear discriminant analysis
-r.lda <- MASS::lda(Y~X,r)
-r.lda.pred <- r.pred(r.lda)
-mean(r.lda.pred==r$Y)
-
-#quadratic discriminant analysis
-r.qda <- MASS::qda(Y~X,r) 
-r.qda.pred <- r.pred(r.qda)
-mean(r.qda.pred==r$Y)
-
-class::knn(train=r$X,test=r$X,cl=r$Y,k=1)
+b <- c(-4,2,5,4)
+n <- 1000
+# Generate the sample data
+r <- link(b,n)
 ```
+
+
+```{r warning=FALSE}
+ter_boot <- NULL
+p <- 3/4 # draw 1/4 hold out
+B <- 1000 # 1000 bootstraps
+for(i in 1:B) {
+  
+  train <- r.sample(n,p)
+  test <- !train
+  
+  #linear probability model
+  r.lm <- lm(Y~.,r,subset=train)
+  r.lm.pred <- r.pred(r.lm,newdata=r[test,])
+  ter_ <- data.frame(lm=1-mean(r.lm.pred==r$Y[test]))
+  
+  #logistic regression
+  r.glm <- glm(Y~.,r,family = binomial,subset=train)
+  r.glm.pred <- r.pred(r.glm,newdata=r[test,])
+  ter_$glm <- 1-mean(r.glm.pred==r$Y[test])
+  
+  #linear discriminant analysis
+  r.lda <- MASS::lda(Y~.,r,subset=train)
+  r.lda.pred <- r.pred(r.lda,newdata=r[test,])
+  ter_$lda <- 1-mean(r.lda.pred==r$Y[test])
+  
+  #quadratic discriminant analysis
+  r.qda <- MASS::qda(Y~.,r,subset=train) 
+  r.qda.pred <- r.pred(r.qda,newdata=r[test,])
+  ter_$qda <- 1-mean(r.qda.pred==r$Y[test])
+  
+  r.knn1 <- class::knn(
+    use.all = TRUE,
+    train=r[train,1:2],
+    test=r[test,1:2],
+    cl=r$Y[train],
+    k=1
+  )
+  ter_$knn1 <- 1-mean(r.knn1==r$Y[test])
+  
+  r.knn2 <- class::knn(
+    use.all = TRUE,
+    train=r[train,1:2],
+    test=r[test,1:2],
+    cl=r$Y[train],
+    k=2
+  )
+  ter_$knn2 <- 1-mean(r.knn2==r$Y[test])
+  
+  r.knn3 <- class::knn(
+    use.all = TRUE,
+    train=r[train,1:2],
+    test=r[test,1:2],
+    cl=r$Y[train],
+    k=3
+  )
+  ter_$knn3 <- 1-mean(r.knn3==r$Y[test])
+  
+  r.knn4 <- class::knn(
+    use.all = TRUE,
+    train=r[train,1:2],
+    test=r[test,1:2],
+    cl=r$Y[train],
+    k=4
+  )
+  ter_$knn4 <- 1-mean(r.knn4==r$Y[test])
+  
+  r.knn5 <- class::knn(
+    use.all = TRUE,
+    train=r[train,1:2],
+    test=r[test,1:2],
+    cl=r$Y[train],
+    k=5
+  )
+  ter_$knn5 <- 1-mean(r.knn5==r$Y[test])
+  
+  r.knn6 <- class::knn(
+    use.all = TRUE,
+    train=r[train,1:2],
+    test=r[test,1:2],
+    cl=r$Y[train],
+    k=6
+  )
+  ter_$knn6 <- 1-mean(r.knn6==r$Y[test])
+  
+  ter_boot <- rbind(ter,ter_)
+}
+
+boxplot(ter, xlab="models", main="Test error rates")
+
+```
+
+Variance and distribution of test error rates observed from the bootstrap.
