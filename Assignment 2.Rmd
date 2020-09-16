@@ -314,4 +314,6 @@ boxplot(ter, xlab="models", main="Test error rates")
 
 ```
 
-Variance and distribution of test error rates observed from the bootstrap.
+The figure above plots the distribution of test error rates observed from the bootstrap simulation of 10 classifying models.
+
+All models show a negative skew in the distribution of test error rates (TER), while the linear probability model (`lm`) shows the greatest range of TER variance that is observered in the models.
