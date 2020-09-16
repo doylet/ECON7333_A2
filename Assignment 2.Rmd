@@ -141,7 +141,7 @@ Consider the model. Let $X$ and $U$ be two independent uniformly distributed ran
 
 $$Y=I\left(U\leq \frac{1}{1+\exp(-\beta_0-\beta_1X-\beta_2X^3-\beta_3\log(X))}\right)$$
 
-where $\text{I}(\cdot)$ equals $1$ if $U \leq F(X)$ and $0$ otherwise.
+where $Y=\text{I}(\cdot)$ equals $1$ if $U \leq F(X)$ and $0$ otherwise.
 
 1. Assuming one observes a sample of size n of the variables X and Y, comment the underlying model for that dataset while explaining its structure in plain English.
 
@@ -316,4 +316,4 @@ boxplot(ter, xlab="models", main="Test error rates")
 
 The figure above plots the distribution of test error rates observed from the bootstrap simulation of 10 classifying models.
 
-All models show a negative skew in the distribution of test error rates (TER), while the linear probability model (`lm`) shows the greatest range of TER variance that is observered in the models.
+All models show a negative skew in the distribution of test error rates (TER), while the linear probability model (`lm`) shows the greatest range of TER variance that is observered in the models and largest median TER.
