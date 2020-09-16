@@ -21,23 +21,10 @@ attach(LR2)
 
 $$\text{Pr}(Y=1 | X=x)=\Phi(\beta_0+\beta_1x)$$
 $$\Phi(x)=\int_{-\infty}^{x}\frac{1}{\sqrt{2\pi}}\exp^{-\frac{1}{2}t^2}dt$$
-```{r eval=FALSE, include=FALSE}
-phi_pdf <- function(x) {
-  cons <- sqrt(2*pi)^-1
-  
-  # ab <- seq(-10,x,by = 0.001)
-  cons*exp(-(x^2/2))
-}
-#PDF
-phi_pdf(0)  #0.3989423
-dnorm(0,0,1)#0.3989423
-```
 
+Thus $\Phi(\beta_0+\beta_1x)=\text{P}(Z\leq z),\; Z\sim\mathcal{N}(0,1)$.  
+Write an `R` function that computes the maximum likelihood estimate along with bootstrapped errors.  
 
-$$\Phi(z)=\text{P}(Z \leq z), Z\sim\mathcal{N}(0,1)$$
-Thus $\Phi(\beta_0+\beta_1x)=\text{P}(Z\leq z)$
-
-Write an `R` function that computes the maximum likelihood estimate along with bootstrapped errors.
 
 ```{r}
 # objective function
@@ -59,7 +46,7 @@ probit_mle_b <- function(x,y,...) {
     return(-ll)
   }
   
-  # mle
+  # compute the mle
   # 
   obj = optim(c(0,0), probit, x=x, y=y)
   
@@ -72,13 +59,15 @@ probit_mle_b <- function(x,y,...) {
     coefficients = c(coef1,coef2)
   )
   
-  ## Bootstrap
-  ## 
+  # Bootstrap the SE
+  # 
   
   B <- 100 # boots
   
   b_boot = matrix(rep(0,2*B),B,2)
   n <- length(y) #n=1000
+  
+  # The bootstrap
   for (i in 1:B) {
     # indices for the i-th bootstrap subsample
     ind_ = sample(n,n,replace=TRUE)
@@ -98,12 +87,13 @@ probit_mle_b <- function(x,y,...) {
   return_list$boots <- b_boot
 
   
-  # If optional vector of new obs is supplied
-  # then predict vector of response 
+  # Retrun prediction vector if optional new obs are supplied
   # 
   if(!is.null(opts)) {
     opts <- unlist(opts)
-    return_list$response = ifelse(pnorm(coef1+coef2*opts,0,1)>1/2,1,0)
+    if(is.numeric(opts)) {
+      return_list$response = ifelse(pnorm(coef1+coef2*opts,0,1)>1/2,1,0)
+    }
   }
     
   return(
@@ -124,7 +114,7 @@ est$coefficients
 # Calc test error
 1-sum(diag(prop.table(table(est$response,y))))
 
-# Setup train/test held out, then estimate
+# Setup train/test hold out, then estimate
 train <- LR2[1:800,]
 test <- LR2[801:1000,]
 est.2 <- probit_mle_b(train$x,train$y,test$x)
@@ -136,7 +126,6 @@ est.2$coefficients
 ```
 
 ```{r}
-glm.est <- suppressWarnings(glm(y~x,family=binomial(link = "probit")))
 plot(x,y, pch=20, col=scales::alpha("black",alpha = 0.3))
 abline(h=1, lty=2)
 abline(h=0, lty=2)
@@ -152,11 +141,17 @@ Consider the model. Let $X$ and $U$ be two independent uniformly distributed ran
 
 $$Y=I\left(U\leq \frac{1}{1+\exp(-\beta_0-\beta_1X-\beta_2X^3-\beta_3\log(X))}\right)$$
 
-where 
+where $\text{I}(\cdot)$ equals $1$ if $U \leq F(X)$ and $0$ otherwise.
 
 1. Assuming one observes a sample of size n of the variables X and Y, comment the underlying model for that dataset while explaining its structure in plain English.
 
-The indicator function constructs a test that compares a standard logistic regression function and sample uniform random variable. The logistic function takes an explanatory variable $x$ drawn from the uniform random variable $X$, and computes a response. The response is compared to an independent sample of a random variable from the uniform distribution, $U$. Where the logistic response is greater than or equal to the uniform random variable, the indicator variable classifies 
+The indicator function constructs a test that compares a logistic regression function and uniform random variable.
+
+The logistic function returns a sample drawn from the uniform random variable $X$. 
+
+The response is compared to an independent sample of random variable from the uniform distribution, $U$. 
+
+Where the logistic response is less than or equal to the uniform random variable, the indicator functions maps $Y$ to a value 1, and 0 otherwise. 
 
 2. Construct an `R` function that generates a sample of size $n$ of variables $X$ and $Y$.
 
@@ -179,14 +174,18 @@ link <- function(b,n) {
 
 ```{r}
 # Helper function to draw samples
-r.sample <- function(n,p) {
+r.sample <- function(n,p=1/2) {
   train <- runif(n)<=p
   
   train
 }
 
-# Predict response convenience wrapper 
+# Convenience wrapper to extract response from predict()
 r.pred <- function(model,thr=0.5,newdata=NULL) {
+  #' @model An object of class "lm","glm","lda","qda".
+  #' @thr A scale of type `double`. `thr` sets the class threshold.
+  #' @newdata An optional vector of new data.
+  
   if(is.null(newdata)) print("No data")
   prob <- suppressWarnings(predict(model,newdata,type="response"))
   
@@ -217,10 +216,14 @@ b <- c(-4,2,5,4) # beta constants
 B <- 1000 # bootstraps
 n <- 1000 # sample size
 p <- 1/2 # hold out half
-# draw sample
+
+# draw sample from model
 # 
 r <- link(b,n)
+
+# the bootstrap
 for(i in 1:B) {
+  #sampler
   train <- r.sample(n,p)
   test <- !train
   
