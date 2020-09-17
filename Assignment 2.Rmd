@@ -1,5 +1,6 @@
 ---
-title: "ECON7333 Assignment 2"
+title: "ECON7333: Assignment 2"
+author: "Thomas Doyle"
 output:
   pdf_document: default
   html_document: 
@@ -8,6 +9,8 @@ editor_options:
   chunk_output_type: inline
 ---
 
+#### Setup
+
 ```{r}
 options(scipen=999)
 set.seed(1234)
@@ -15,25 +18,25 @@ LR2 <- read.table(file="./LR2.csv", header = TRUE, sep = ",")
 attach(LR2)
 ```
 
-# Assignment 2
-
 ## Exercise 1
 
+Consider a probit model given by the following conditional probability,
 $$\text{Pr}(Y=1 | X=x)=\Phi(\beta_0+\beta_1x)$$
+Where $\Phi$ is the cumulative distribution function of a standard normal random variable, $\mathcal{N}(0,1)$:
+
 $$\Phi(x)=\int_{-\infty}^{x}\frac{1}{\sqrt{2\pi}}\exp^{-\frac{1}{2}t^2}dt$$
 
 Thus $\Phi(\beta_0+\beta_1x)=\text{P}(Z\leq z),\; Z\sim\mathcal{N}(0,1)$.  
+
 Write an `R` function that computes the maximum likelihood estimate along with bootstrapped errors.  
 
-
 ```{r}
-# objective function
-probit_mle_b <- function(x,y,...) {
+probit_mle_b <- function(x,y,opt=NULL) {
   
-  opts <- list(...)
+  opts <- opt # Optional predict vector
   
   # probit link
-  # 
+  # objective function
   probit <- function(b,x,y) {
     n <- length(y)
     ll <- 0
@@ -102,38 +105,36 @@ probit_mle_b <- function(x,y,...) {
 }
 ```
 
-Apply the probit model to the `LR2` data set.  
+We then apply the probit model to the `LR2` data set.  
 
 ```{r}
 # Apply probit_mle_bto LR2, supply optional vector x
 # 
 est <- probit_mle_b(LR2$x,LR2$y,x)
 est$coefficients
-#-4.242606 -3.086030
-
+est$standard_errors
 # Calc test error
-1-sum(diag(prop.table(table(est$response,y))))
-
+mean(est$response!=y)
 # Setup train/test hold out, then estimate
 train <- LR2[1:800,]
 test <- LR2[801:1000,]
 est.2 <- probit_mle_b(train$x,train$y,test$x)
 est.2$coefficients
-#-4.557228 -3.213275
-
 # Calc test error
-1-sum(diag(prop.table(table(est.2$response,test$y))))
+mean(est.2$response!=test$y)
 ```
 
+The `R` function returns a maximum likelihood estimate of the probit model parameters and their estimated standard errors. The estimated parameters are $\beta_0=-4.232\; (0.304)$ and $\beta_1-3.086\; (0.254)$ respectively. The `R` function uses a bootstrap sampling method of $n=1000$ to estimate standard deviation of the fitted parameters. The parameters provide a training error rate of $4.3\%$, and test error rate of $6.0\%$ when fitted to the `LR2` dataset.
+
+The below figure illustrates a plot of the probit distribution, and predicted response variable, $\hat{y}=\Phi(\beta_0+\beta_1x)$.
+
 ```{r}
-plot(x,y, pch=20, col=scales::alpha("black",alpha = 0.3))
+plot(x,y, pch=20, col=scales::alpha("black",alpha = 0.3), main="")
 abline(h=1, lty=2)
 abline(h=0, lty=2)
 y1 <- sort(est$fitted,TRUE)
 points(sort(x),y1,pch=20,cex=0.7,col=scales::alpha("darkorange",0.5))
 ```
-
-
 
 ## Exercise 2
 
@@ -145,32 +146,30 @@ where $Y=\text{I}(\cdot)$ equals $1$ if $U \leq F(X)$ and $0$ otherwise.
 
 1. Assuming one observes a sample of size n of the variables X and Y, comment the underlying model for that dataset while explaining its structure in plain English.
 
-The indicator function constructs a test that compares a logistic regression function and uniform random variable.
-
-The logistic function returns a sample drawn from the uniform random variable $X$. 
-
-The response is compared to an independent sample of random variable from the uniform distribution, $U$. 
-
-Where the logistic response is less than or equal to the uniform random variable, the indicator functions maps $Y$ to a value 1, and 0 otherwise. 
+The indicator function constructs a test that compares a logistic regression function and uniform random variable. The logistic function returns a sample drawn from the uniform random variable $X$, and is compared to an independent sample of random variable from the uniform distribution, $U$. Where the logistic estimate is less than or equal to the uniform random variable, the indicator functions assigns a response of $Y=1$, and 0 otherwise. 
 
 2. Construct an `R` function that generates a sample of size $n$ of variables $X$ and $Y$.
 
 ```{r}
 link <- function(b,n) {
+  # draw two random samples of size n 
+  # from uniform distribution.
+  # 
   X <- runif(n)
   U <- runif(n)
   
+  # The logit
   logit_X <- function(b,x) {
     (1 + exp(-b[1]-b[2]*x-b[3]*x^3-b[4]*log(x)))^-1
   }
   
+  # classify Y following classification scheme
   Y <- ifelse(U<=logit_X(b,X),1,0)
   return(data.frame(X=X,U=U,Y=Y))
 }
 ```
 
-
-3. Constructe a box and whisker plot of test error rates.
+3. Construct a box and whisker plot of test error rates.
 
 ```{r}
 # Helper function to draw samples
@@ -208,9 +207,9 @@ r.pred <- function(model,thr=0.5,newdata=NULL) {
 }
 ```
 
+The figure below plots the distribution of test error rates observed from the bootstrap simulation of 10 classifying models.
 
-
-```{r warning=FALSE}
+```{r fig.width=7.5, warning=FALSE}
 ter <- NULL
 b <- c(-4,2,5,4) # beta constants
 B <- 1000 # bootstraps
@@ -222,8 +221,10 @@ p <- 1/2 # hold out half
 r <- link(b,n)
 
 # the bootstrap
+# 
 for(i in 1:B) {
   #sampler
+  # hold out strategy
   train <- r.sample(n,p)
   test <- !train
   
@@ -231,25 +232,26 @@ for(i in 1:B) {
   # 
   r.lm <- lm(Y~.,r,subset=train)
   r.lm.pred <- r.pred(r.lm,newdata=r[test,])
-  ter_ <- data.frame(lm=1-mean(r.lm.pred==r$Y[test]))
+  ter_ <- data.frame(lm=mean(r.lm.pred!=r$Y[test]))
+  # test error rate
   
   # logistic regression
   # 
   r.glm <- glm(Y~.,r,family = binomial,subset=train)
   r.glm.pred <- r.pred(r.glm,newdata=r[test,])
-  ter_$glm <- 1-mean(r.glm.pred==r$Y[test])
+  ter_$glm <- mean(r.glm.pred!=r$Y[test])
   
   # linear discriminant analysis
   # 
   r.lda <- MASS::lda(Y~.,r,subset=train)
   r.lda.pred <- r.pred(r.lda,newdata=r[test,])
-  ter_$lda <- 1-mean(r.lda.pred==r$Y[test])
+  ter_$lda <- mean(r.lda.pred!=r$Y[test])
 
   # quadratic discriminant analysis
   # 
   r.qda <- MASS::qda(Y~.,r,subset=train)
   r.qda.pred <- r.pred(r.qda,newdata=r[test,])
-  ter_$qda <- 1-mean(r.qda.pred==r$Y[test])
+  ter_$qda <- mean(r.qda.pred!=r$Y[test])
 
   # K-nearest neighbours
   # 
@@ -260,7 +262,7 @@ for(i in 1:B) {
     cl=r$Y[train],
     k=1
   )
-  ter_$knn1 <- 1-mean(r.knn1==r$Y[test])
+  ter_$knn1 <- mean(r.knn1!=r$Y[test])
 
   r.knn2 <- class::knn(
     use.all = TRUE,
@@ -269,7 +271,7 @@ for(i in 1:B) {
     cl=r$Y[train],
     k=2
   )
-  ter_$knn2 <- 1-mean(r.knn2==r$Y[test])
+  ter_$knn2 <- mean(r.knn2!=r$Y[test])
 
   r.knn3 <- class::knn(
     use.all = TRUE,
@@ -278,7 +280,7 @@ for(i in 1:B) {
     cl=r$Y[train],
     k=3
   )
-  ter_$knn3 <- 1-mean(r.knn3==r$Y[test])
+  ter_$knn3 <- mean(r.knn3!=r$Y[test])
 
   r.knn4 <- class::knn(
     use.all = TRUE,
@@ -287,7 +289,7 @@ for(i in 1:B) {
     cl=r$Y[train],
     k=4
   )
-  ter_$knn4 <- 1-mean(r.knn4==r$Y[test])
+  ter_$knn4 <- mean(r.knn4!=r$Y[test])
 
   r.knn5 <- class::knn(
     use.all = TRUE,
@@ -296,7 +298,7 @@ for(i in 1:B) {
     cl=r$Y[train],
     k=5
   )
-  ter_$knn5 <- 1-mean(r.knn5==r$Y[test])
+  ter_$knn5 <- mean(r.knn5!=r$Y[test])
 
   r.knn6 <- class::knn(
     use.all = TRUE,
@@ -305,15 +307,47 @@ for(i in 1:B) {
     cl=r$Y[train],
     k=6
   )
-  ter_$knn6 <- 1-mean(r.knn6==r$Y[test])
+  ter_$knn6 <- mean(r.knn6!=r$Y[test])
   
   ter <- rbind(ter,ter_)
 }
 
+# plot figure box and whisker
 boxplot(ter, xlab="models", main="Test error rates")
 
 ```
 
-The figure above plots the distribution of test error rates observed from the bootstrap simulation of 10 classifying models.
+All models show a negative skew in the sampled distribution of test error rates. The linear probability model (`lm`) shows the greatest IQR of test error rates when compared to the set of models ($\pm2.8\%$), and largest median test error rate ($7.4\%$).
 
-All models show a negative skew in the distribution of test error rates (TER), while the linear probability model (`lm`) shows the greatest range of TER variance that is observered in the models and largest median TER.
+The logistic regression models (`glm`) show the smallest median test error rate ($1.55\%$), which is to be expected given the form of the true model. Based on the observed test error rates, the author concludes that a logistic regression model presents the best predictor of $Y$.
+
+The nearest neighbour classifier models (`knn`) are relatively similar when comparing test error rates IQR and median. $K=3$ presents the lowest median test error rate ($2.0\%$), and smallests observed IQR of all nearest neighbour classifier models ($0.83\%$).
+
+The quadratic descriminent model (`qda`) presents a marginal improvement to the linear descriminent model (`lda`) when comparing the variance and median levels of test error rates. The median test errors were $3.0\%$ and $2.27\%$ respectively.  
+
+```{r eval=FALSE, include=FALSE}
+#true data
+g <- 60
+grid <- expand.grid(
+  seq(0,1,length.out = g),
+  seq(0,1,length.out = g)
+  )
+class.grid <- class::knn(r[,1:2],grid,r$Y,k=1,prob=TRUE)
+prob.grid <- attr(class.grid,"prob")
+prob.grid <- ifelse(class.grid==1,prob.grid,1-prob.grid)
+prob.matrix <- matrix(prob.grid,g,g)
+contour(
+  x=seq(0,1,length.out = g), 
+  y=seq(0,1,length.out = g), 
+  z=prob.matrix, 
+  levels=0.5, drawlabels=FALSE, 
+  labels='', xlab='', ylab='', lwd=1,
+  main="Generated data with \n1-nearest neighbour decision \nboundary",
+  asp=1
+)
+points(
+  grid,
+  col=ifelse(prob.matrix>0.5,'coral','cornflowerblue'),
+  pch=20, cex=.2
+)
+```
